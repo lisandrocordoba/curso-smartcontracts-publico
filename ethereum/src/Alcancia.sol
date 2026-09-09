@@ -22,6 +22,8 @@ contract Alcancia {
     error SinAhorros();
     error TransferenciaFallo();
 
+    error NoEstaCerrada();
+
     constructor() {
         owner = msg.sender;
     }
@@ -74,6 +76,14 @@ contract Alcancia {
     // Tu implementación tiene que ser coherente con los tests que escribas.
     //
     function retirar() external {
-        // TODO: implementar
+        if(ahorros[msg.sender] == 0) revert SinAhorros();
+
+        uint256 monto = ahorros[msg.sender];
+        ahorros[msg.sender] = 0;
+
+        (bool ok, ) = msg.sender.call{value: monto}("");
+        if(!ok) revert TransferenciaFallo();
+
+        emit Retiro(msg.sender, monto);
     }
 }

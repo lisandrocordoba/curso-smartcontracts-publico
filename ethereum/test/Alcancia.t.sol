@@ -22,7 +22,6 @@ contract AlcanciaTest is Test {
     // =========================================================================
     // MODELO — este ya está resuelto. Miralo y usalo de plantilla.
     // =========================================================================
-
     function test_Ahorrar_AcreditaElAhorro() public {
         vm.prank(alice);
         alcancia.ahorrar{value: 1 ether}();
@@ -38,8 +37,17 @@ contract AlcanciaTest is Test {
     /// El caso feliz: alice ahorra 3 ETH, retira, y su ahorro queda en 0
     /// **y** el ETH volvió a su cuenta.
     function test_Retirar_DevuelveTodoElAhorro() public {
-        fail("TODO: escribir este test");
+        vm.startPrank(alice);
+        uint256 balanceInicial = alice.balance;
+
+        alcancia.ahorrar{value: 3 ether}();
+        assertEq(alice.balance, (balanceInicial - 3 ether));
+
+        alcancia.retirar();
+        assertEq(alcancia.miAhorro(), 0 ether);
+        assertEq(alice.balance, balanceInicial);
     }
+
 
     /// Retirar sin haber ahorrado nada tiene que revertir con `SinAhorros`.
     /// Pista: `vm.expectRevert(Alcancia.SinAhorros.selector);`
