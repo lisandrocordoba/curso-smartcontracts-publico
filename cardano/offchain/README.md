@@ -5,15 +5,35 @@ Arma y manda **transacciones de verdad** contra un devnet local de Cardano
 validator, las reclama, las cancela — con fees, colateral, firmas y saldos que
 se mueven.
 
-> Hay **dos demos** de la Clase 4 y hacen cosas distintas:
+> Hay **tres demos** de la Clase 4 y hacen cosas distintas:
 >
 > | | qué hace | red |
 > |---|---|---|
 > | `scripts/demo-tx-cardano.sh` | ejecuta el validator aislado sobre transacciones armadas a mano | **ninguna** |
-> | esta (`npm run demo`) | manda transacciones a una cadena | devnet local |
+> | `npm run demo-simple` | **bloquea y reclama**, en 40 líneas legibles | devnet local |
+> | `npm run demo` | el recorrido completo, con los tres actos | devnet local |
 >
-> La primera nunca falla y sirve para explicar el modelo. Esta muestra que la
-> cosa funciona de verdad.
+> La primera explica el modelo y nunca falla. La segunda es la que acompaña la
+> slide "El off-chain (Mesh.js)": el mismo código, corriendo. La tercera es el
+> recorrido narrado, incluido el agujero del escrow.
+> Ver `docs/guia-profesor/clase-04.md` §5, §5ter y §5bis.
+
+## El ciclo mínimo (`npm run demo-simple`)
+
+```bash
+./scripts/devnet.sh up          # terminal 1
+cd cardano/offchain && npm run demo-simple
+```
+
+Bloquea 5 ADA para Bob y se los deja reclamar. Nada más. Son **~40 líneas de
+código**, escritas para leerse en pantalla mientras se explica: el `lock` (que no
+ejecuta el validator) y el `claim` (que sí), con la cadena de `MeshTxBuilder`
+comentada línea por línea.
+
+El andamiaje —de dónde salen las claves, cómo se lee el blueprint, cómo se
+traduce tiempo a slots— vive en `comun.ts`, y por eso el archivo entra de un
+vistazo. `pasos.ts` es la versión completa: agrega cancelar, los casos que deben
+fallar, y mandar los fondos a otra dirección.
 
 ## Arrancar
 

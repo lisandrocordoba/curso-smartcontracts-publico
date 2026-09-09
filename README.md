@@ -60,12 +60,12 @@ Y para entrar:
 
 (si tenes arm)
 ```bash
-podman run -it --rm --userns=keep-id -v "$PWD":/curso:z curso-sc:arm64
+podman run -it --rm --userns=keep-id --name curso -v "$PWD":/curso:z curso-sc:arm64
 ```
 
 (si tenes amd64)
 ```bash
-podman run -it --rm --userns=keep-id -v "$PWD":/curso:z curso-sc:amd64
+podman run -it --rm --userns=keep-id -v --name curso "$PWD":/curso:z curso-sc:amd64
 ```
 
 
@@ -73,6 +73,24 @@ El -v monta **tu clon** del repositorio dentro del contenedor en /curso. De esta
 Agregamos **--userns=keep-id** al ejecutar el contenedor para preservar los permisos de tu usuario sobre el directorio montado.
 
 Guía completa —opcionales, servir las slides, `anvil`, demos— en **`docs/entorno-contenedor.md`**.
+
+Si estas en el Laboratorio vas a tener que usar docker. Para eso tener que migrar la imagen:
+
+
+```bash
+chmod +x ./scripts/podman2docker.sh
+./scripts/podman2docker.sh
+```
+
+Anota el nombre de la imagen (empieza con `sha256:elNroDeImagen`
+
+Luego podes usar 
+
+
+```bash
+docker run -it --rm -u root --name curso --network="host" -v "$PWD":/curso:z elNroDeImagen
+```
+
 
 ### 3. Verificar que quedó bien
 
