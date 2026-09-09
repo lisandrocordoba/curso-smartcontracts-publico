@@ -29,21 +29,25 @@ pub type Datum {
 // Lógica auxiliar (testeable de forma aislada, igual que en el escrow)
 // ---------------------------------------------------------------------------
 
-fn can_unlock(_d: Datum, _tx: Transaction) -> Bool {
+fn can_unlock(d: Datum, tx: Transaction) -> Bool {
   // TODO — Clase 5, taller.
   //
   // Devolver True sólo si se cumplen las DOS condiciones:
   //
   //   1. El beneficiario del datum firmó la transacción.
   //      Pista: `list.has(tx.extra_signatories, ...)`, igual que el escrow.
+    let signed_by_beneficiary = list.has(tx.extra_signatories, d.beneficiary)
+
   //
   //   2. La transacción ocurre DESPUÉS del deadline.
   //      Ojo: el escrow usa `interval.before`. Acá va el otro.
   //      Y como en el escrow, no alcanza con mirar un borde: se exige que
   //      TODO el validity_range esté del lado correcto (`interval.includes`).
+    let after_deadline = interval.after(d.deadline) |> interval.includes(tx.validity_range)
+    signed_by_beneficiary && after_deadline
+
   //
   // Cuando esté, cambiar `_d` y `_tx` por `d` y `tx`.
-  todo @"implementar can_unlock"
 }
 
 // ---------------------------------------------------------------------------
@@ -71,6 +75,8 @@ validator vesting {
 // ---------------------------------------------------------------------------
 
 const beneficiary_hash: ByteArray = #"aabbccdd"
+
+const owner_hash: ByteArray = #"11223344"
 
 const deadline_ms: Int = 10_000
 
@@ -104,7 +110,15 @@ test unlock_antes_del_deadline_falla() {
 // Que falle cuando firma otro (definí un hash distinto de `beneficiary_hash`),
 // aunque el tiempo esté bien.
 test unlock_con_firma_equivocada_falla() {
-  False
+  let d = make_datum()
+  let tx =
+    Transaction {
+      ..placeholder,
+      extra_signatories: [owner_hash],
+      validity_range: interval.between(1_000, 5_000),
+    }
+  !can_unlock(d, tx)
+
   // ↑ borrá este False y escribí el test
 }
 
@@ -114,6 +128,13 @@ test unlock_con_firma_equivocada_falla() {
 // qué garantiza `includes`, escribilo, y si tu implementación no lo cumple,
 // arreglala.
 test unlock_con_rango_que_cruza_el_deadline_falla() {
-  False
+  let d = make_datum()
+  let tx =
+    Transaction {
+      ..placeholder,
+      extra_signatories: [beneficiary_hash],
+      validity_range: interval.between(5000, 15000),
+    }
+  !can_unlock(d, tx)
   // ↑ borrá este False y escribí el test
 }
