@@ -15,17 +15,31 @@ git pull
 | Cuándo | Qué se agrega | Dónde va a aparecer |
 |---|---|---|
 | **Clase 6** | `VaultInvariant.t.sol` — tests de invariantes | `ethereum/test/` |
-| **Clases 6–7** | `VaultVulnerable.sol` y sus tests | `ethereum/src/`, `ethereum/test/` |
-| **Clases 6–7** | `VaultFixed.sol` y sus tests | `ethereum/src/`, `ethereum/test/` |
-| **Clases 8–9** | `escrow_vulnerable.ak` | `cardano/validators/` |
-| **Clases 8–9** | `escrow_fixed.ak` | `cardano/validators/` |
 | **Cada clase** | Las slides | `docs/slides/clase-NN/slides.md` |
+
+## Lo que ya llegó
+
+| Qué | Dónde |
+|---|---|
+| `VaultVulnerable.sol` y sus tests (Clases 6–7) — el atacante y los PoCs, sin escribir | `ethereum/src/`, `ethereum/test/VaultVulnerable.t.sol` |
+| halmos sobre el vault vulnerable (Clases 6–7) | `ethereum/test/halmos/`, se corre con `halmos` desde `ethereum/` |
+| `escrow_vulnerable.ak` (Clases 8–9) — el escrow double-satisfiable, con el test que lo demuestra | `cardano/validators/` |
+| `vesting_vulnerable.ak` (Clase 9) — el vesting versión 2; los PoCs y las propiedades, sin escribir | `cardano/validators/`, consignas en `cardano/Taller-Clase9.md` |
+
+Las versiones **arregladas** (del vault, del escrow y del vesting) no se publican: las escribís
+vos en los talleres de las Clases 7 y 9.
+
+halmos viene en la imagen a partir de la versión que lo agregó, y `aiken-lang/fuzz` (los
+generadores de los property tests) a partir de la que trajo la Clase 9: para tenerlos hay que
+**reconstruirla** (`./scripts/build-image.sh`); montar el clon actualizado no alcanza. Con `fuzz`
+hay una salida: el primer `aiken check` lo baja de GitHub si hay red.
 
 ## Por qué no está todo desde el día 1
 
-Las versiones `_vulnerable` y `_fixed` **son** el ejercicio de las Clases 6 a 9:
-una tiene el bug que hay que encontrar, la otra es la respuesta. Tenerlas a mano
-desde el principio convierte un taller de análisis en una lectura.
+Las versiones `_vulnerable` **son** el ejercicio de las Clases 6 a 9, y las
+arregladas son la respuesta: por eso las primeras llegan cuando llega su clase y las
+segundas no se publican. Tenerlas a mano desde el principio convierte un taller de
+análisis en una lectura.
 
 El caso base sí está completo desde ahora — `Vault.sol` y `escrow.ak` son el punto
 de partida de todo lo demás.
@@ -46,17 +60,23 @@ llegue material nuevo tenés dos opciones:
   herramientas ya están adentro, sólo cambia el material.
 
 > La validación del build (`forge test`, `aiken check`) usa los tests que existan
-> en ese momento. Hoy la línea base es **11 tests en Ethereum** y **7 en Cardano**;
+> en ese momento. Hoy la línea base es **12 tests en Ethereum (y 2 en SKIP)** y **14 en Cardano**;
 > con el material nuevo esos números suben.
 
 ## Lo que se escribe en clase, no se agrega después
 
 Distinto de lo de arriba: esto **no va a llegar por `git pull`** — lo escribís vos
-durante el taller de la Clase 3. Están en el repo como **TODO**, con la consigna en el comentario:
+durante los talleres. Están en el repo como **TODO**, con la consigna en el comentario:
 
 | Dónde | Qué falta |
 |---|---|
-| `ethereum/src/Vault.sol` | `withdrawAll()` — el cuerpo está vacío |
+| `ethereum/src/Vault.sol` | `withdrawAll()` — ya está: se escribió en vivo en la Clase 3 |
 | `ethereum/test/Vault.t.sol` | los **dos** tests de `withdrawAll` (el camino feliz y el borde) |
 | `ethereum/src/Alcancia.sol` | `retirar()` — es la actividad de cierre |
 | `ethereum/test/Alcancia.t.sol` | 4 tests de la `Alcancia`, que arrancan en rojo |
+| `ethereum/test/VaultVulnerable.t.sol` | Clase 7: `ReentrancyAttacker` y los dos PoCs, que arrancan en SKIP |
+| `ethereum/test/halmos/VaultHalmos.t.sol` | Clase 7: `AtacanteUnaVez` |
+| `ethereum/src/MiVaultFixed.sol` | Clase 7: el fix, desde cero (no existe todavía) |
+| `cardano/validators/vesting.ak` | Clase 5: `can_unlock`; sus 5 tests arrancan en rojo |
+| `cardano/validators/vesting_vulnerable.ak` | Clase 9: los dos `poc_*` y las dos `prop_*`, que arrancan en rojo (`todo`) |
+| `cardano/validators/mi_vesting_fixed.ak` | Clase 9: el fix, desde cero (no existe todavía) |

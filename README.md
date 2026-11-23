@@ -50,22 +50,36 @@ Si usás macOS, también podés instalarlo con Homebrew:
 brew install podman
 ```
 
+Podes crearla asi:
 
 ```bash
 ./scripts/build-image.sh arm64      # Apple Silicon
 ./scripts/build-image.sh amd64      # labs Intel
 ```
 
+O levantar una imagen comprimida de aca: [Repo Imagenes Podman](https://drive.google.com/drive/folders/1_lzZMsTSA2rjcV9YkzBjaUYWqbT3g0EY?usp=drive_link) y despues hacer: 
+
+```bash
+podman load -i path-a-imagen 
+````
+
+Y cambiarle el nombre. Por ejemplo:
+
+```bash
+podman tag <IMAGE_ID_O_NOMBRE_ACTUAL> curso-sc:arm64
+````
+
+
 Y para entrar:
 
 (si tenes arm)
 ```bash
-podman run -it --rm --userns=keep-id --name curso -v "$PWD":/curso:z curso-sc:arm64
+podman run -it --rm -u root -v "$PWD":/curso:z curso-sc:arm64
 ```
 
 (si tenes amd64)
 ```bash
-podman run -it --rm --userns=keep-id -v --name curso "$PWD":/curso:z curso-sc:amd64
+podman run -it --rm -u root -v "$PWD":/curso:z curso-sc:amd64
 ```
 
 
@@ -95,8 +109,8 @@ docker run -it --rm -u root --name curso --network="host" -v "$PWD":/curso:z elN
 ### 3. Verificar que quedó bien
 
 ```bash
-cd /curso/ethereum && forge test --no-match-contract AlcanciaTest    # 11 tests en verde
-cd /curso/cardano  && aiken check                                    # 7 tests en verde
+cd /curso/ethereum && forge test --no-match-contract AlcanciaTest    # 12 en verde y 2 SKIP (el taller de la Clase 7)
+cd /curso/cardano  && aiken check -m claim -m cancel                 # 7 tests en verde
 ```
 
 > `AlcanciaTest` se excluye a propósito: son los tests de la **actividad de la Clase 3** y arrancan
@@ -122,13 +136,16 @@ cd /curso/cardano  && aiken check                                    # 7 tests e
 │   ├── src/Alcancia.sol       # La actividad de la Clase 3 (con TODOs)
 │   └── offchain/              # Bonus: Hardhat + ethers + chai
 ├── cardano/                   # Proyecto Aiken
-│   ├── validators/escrow.ak   # Se construye en la Clase 5, se audita en la 9
+│   ├── validators/escrow.ak   # Se construye en la Clase 5, se audita en la 8
+│   ├── validators/vesting_vulnerable.ak  # El taller de la Clase 9 (con TODOs)
+│   ├── Taller-Clase9.md       # Las consignas del taller de la Clase 9
 │   └── offchain/              # Mesh: transacciones reales contra un devnet local
 └── scripts/                   # build-image, devnet, demos, exportar slides
 ```
 
-**Ojo:** el material de las Clases 6 a 9 —las versiones vulnerables y arregladas— **no está todavía**
-y se agrega a medida que avanza el curso. Ver **`PROXIMAS-CLASES.md`**.
+**Ojo:** las versiones **vulnerables** de las Clases 6 a 9 ya están (`VaultVulnerable.sol`,
+`escrow_vulnerable.ak`, `vesting_vulnerable.ak`); las **arregladas** no se publican: se escriben
+en los talleres. Ver **`PROXIMAS-CLASES.md`**.
 
 ## Los dos hilos conductores
 
@@ -142,6 +159,40 @@ y se agrega a medida que avanza el curso. Ver **`PROXIMAS-CLASES.md`**.
 ./scripts/devnet.sh up                                # un devnet local de Cardano (Yaci)…
 cd cardano/offchain && npm install && npm run demo    # …y transacciones de verdad
 ```
+
+Y para la Clase 8, con el mismo mecanismo: `./scripts/demo-bugs-cardano.sh`, el catálogo de bugs
+EUTXO (double satisfaction, tiempo, minting) con los validators decidiendo sobre cada transacción.
+
+## Taller de análisis (Clase 7)
+
+Encontrar los bugs del `VaultVulnerable`, escribir el exploit y el fix, y verificarlos. Las
+consignas están en [`ethereum/README.md`](ethereum/README.md#taller-de-la-clase-7).
+
+```bash
+cd ethereum
+slither src/VaultVulnerable.sol                               # análisis estático
+forge test --match-path test/VaultVulnerable.t.sol -vvvv      # sus PoCs (arrancan en SKIP)
+halmos --contract VaultVulnerableHalmos                       # la solvencia, con halmos
+```
+
+`halmos` viene en la imagen a partir de la versión que lo agregó: si tu imagen es anterior,
+reconstruila (paso 2).
+
+## Taller de análisis (Clase 9)
+
+Auditar el `vesting_vulnerable`, demostrar sus dos bugs con tests, escribir las propiedades que
+los destapan y el fix. Las consignas están en [`cardano/Taller-Clase9.md`](cardano/Taller-Clase9.md).
+
+```bash
+cd cardano
+aiken check -m v2_                  # lo que anda (5 tests)
+aiken check -m poc_ -m prop_        # los PoCs y las propiedades: los escribís vos (arrancan en rojo)
+```
+
+La primera vez, `aiken check` baja `aiken-lang/fuzz` de GitHub; la imagen reconstruida ya lo trae.
+
+Y en el repaso, la double satisfaction del escrow en una cadena de verdad, con el devnet de la
+Clase 5: `./scripts/devnet.sh up` y `cd cardano/offchain && npm run demo-double`.
 
 ## Mantenerse al día
 

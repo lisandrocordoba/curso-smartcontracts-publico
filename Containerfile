@@ -55,7 +55,6 @@ FROM debian:bookworm-slim
 ARG NODE_VERSION=v22.23.2
 ARG INSTALL_ADERYN=false
 ARG INSTALL_MEDUSA=false
-ARG INSTALL_HALMOS=false
 ARG INSTALL_CHROMIUM=false
 # +372 MB: bonus off-chain de la Clase 3
 ARG INSTALL_HARDHAT=false
@@ -100,13 +99,39 @@ RUN if [ "$INSTALL_CHROMIUM" = "true" ]; then \
     fi
 ENV CHROME_PATH=/usr/bin/chromium
 
-# --- Análisis estático Python (Slither, opcionalmente halmos) ---------------
+# --- Análisis Python: Slither y halmos --------------------------------------
 # venv para no chocar con PEP 668 de Debian.
 RUN python3 -m venv /opt/venv \
     && /opt/venv/bin/pip install --no-cache-dir --upgrade pip \
-    && /opt/venv/bin/pip install --no-cache-dir slither-analyzer \
-    && if [ "$INSTALL_HALMOS" = "true" ]; then /opt/venv/bin/pip install --no-cache-dir halmos; fi
+    && /opt/venv/bin/pip install --no-cache-dir slither-analyzer
 ENV PATH=/opt/venv/bin:$PATH
+
+# halmos (a16z): verificación simbólica acotada sobre tests de Foundry (Clases 6
+# y 7; ethereum/test/halmos/). ~150 MB, casi todo el wheel de z3.
+#
+# NO se instala con un `pip install halmos` pelado, porque en arm64 no anda:
+# halmos 0.3.3 fija `z3-solver==4.12.6.0`, que no tiene wheel para Linux
+# aarch64 (pip intenta compilar z3 y falla por cmake), y además pide
+# `eth_hash[pysha3]` (safe-pysha3, que hay que compilar con gcc) y
+# `yices-solver` (sin wheel aarch64). Por eso las dependencias se instalan a
+# mano, sólo en binario, y halmos con --no-deps:
+#   - z3-solver 4.13.0.0: el primero con wheel manylinux2014 para aarch64.
+#   - eth-hash con backend pycryptodome en lugar de pysha3.
+#   - sin yices: ethereum/halmos.toml elige `solver = "z3"`.
+# Es la misma receta en las dos arquitecturas, para que haya un solo camino.
+# Verificado en arm64 el 2026-09-24: VaultVulnerableHalmos FAIL con
+# contraejemplo y VaultHalmos PASS.
+#
+# El wheel de z3 deja un binario `z3` en /opt/venv/bin, que tapa al /usr/bin/z3
+# de Debian (4.8.12). No afecta al SMTChecker: en amd64 solc carga libz3.so.4.12
+# desde /usr/lib (más abajo), y en arm64 usa Eldarica.
+ARG HALMOS_VERSION=0.3.3
+RUN /opt/venv/bin/pip install --no-cache-dir --only-binary=:all: \
+        "z3-solver==4.13.0.0" "eth-hash[pycryptodome]>=0.7.0" \
+        "sortedcontainers>=2.4.0" "toml>=0.10.2" "rich>=14.0.0,<14.1.0" \
+        "xxhash>=3.5.0" "psutil>=6.1.0" "requests>=2.32.3" "python-dotenv>=1.1.0" \
+    && /opt/venv/bin/pip install --no-cache-dir --no-deps "halmos==${HALMOS_VERSION}" \
+    && /opt/venv/bin/halmos --version
 
 # --- Usuario no root (Podman rootless-friendly) -----------------------------
 RUN useradd -m -u 1000 -s /bin/bash curso
@@ -115,9 +140,18 @@ ENV HOME=/home/curso
 WORKDIR /home/curso
 
 # --- Foundry (forge, cast, anvil) — Clases 2,3,6,7 -------------------------
+# Versión FIJA: un `foundryup` pelado instala la última, y con la 1.8.3 (build
+# del 2026-09-24) pasaron dos cosas: halmos 0.3.3 deja de andar ("Unsupported
+# cheat code: deployCode(string)" en el setUp) y forge cuenta los dos invariantes
+# de VaultInvariantTest como un solo test, así que la línea base que cita el
+# material (23) pasa a 22. Con la 1.7.1 las dos cosas vuelven. Lo de halmos se
+# arregla también en 1.8 con `dynamic_test_linking = false`, que ya está en
+# ethereum/foundry.toml; lo del conteo no tiene opción de configuración. Antes de
+# subir la versión, correr `halmos` y `forge test` en ethereum/.
+ARG FOUNDRY_VERSION=v1.7.1
 ENV PATH=/home/curso/.foundry/bin:$PATH
 RUN curl -L https://foundry.paradigm.xyz | bash \
-    && foundryup \
+    && foundryup --install "${FOUNDRY_VERSION}" \
     && forge --version && anvil --version
 
 # --- Aderyn (opcional, analizador estático alternativo — Clase 6) ----------
@@ -150,10 +184,13 @@ WORKDIR /curso
 # Si esto falla, la imagen NO se construye: es la verificación de que sirve.
 #
 # Se excluye AlcanciaTest: son los tests de la ACTIVIDAD de la Clase 3, que
-# arrancan en rojo a propósito (el alumno los completa). La línea base son los
-# 11 tests de `Vault.t.sol`; ésos sí tienen que pasar para que la imagen se
-# construya. (No están los de `withdrawAll` ni los de invariantes: se escriben
-# en clase — ver PROXIMAS-CLASES.md.)
+# arrancan en rojo a propósito (el alumno los completa). La línea base son 12
+# tests (11 de `Vault.t.sol` y el invariante de `VaultVulnerable.t.sol`); ésos sí
+# tienen que pasar para que la imagen se construya. Los 2 PoCs de
+# `VaultVulnerable.t.sol` son el taller de la Clase 7: arrancan con vm.skip, así
+# que salen como skipped y no rompen el build. test/halmos/ no entra: lo excluye
+# `no_match_path` en foundry.toml, y se corre con `halmos`. (Tampoco están los
+# dos tests de `withdrawAll`: se escriben en clase — ver PROXIMAS-CLASES.md.)
 #
 # Cuando se agregue el material de las Clases 6-9 (ver PROXIMAS-CLASES.md), ese
 # número sube. Actualizalo acá si lo cambiás, pero no hace falta: el `forge test`
@@ -178,10 +215,21 @@ RUN cd /curso/ethereum \
 # `build` además regenera plutus.json (el blueprint), que es lo que consume el
 # off-chain de la Clase 4: así la imagen nunca queda con un blueprint viejo.
 #
-# Línea base: los 7 tests de escrow.ak. Sube cuando se agreguen los validators
-# de las Clases 8-9 (ver PROXIMAS-CLASES.md).
+# Línea base: 14 tests. Los 7 de escrow.ak (`claim_*` y `cancel_*`), los 2
+# `vuln_claim_*` de escrow_vulnerable.ak y los 5 `v2_*` de vesting_vulnerable.ak.
+#
+# Se filtra por nombre igual que el --no-match-contract AlcanciaTest de Ethereum,
+# y por el mismo motivo: lo que arranca en rojo a propósito es el material de los
+# talleres: los 5 `unlock_*` de vesting.ak (Clase 5, `can_unlock` sin implementar)
+# y los `poc_*` y `prop_*` de vesting_vulnerable.ak (Clase 9, son `todo`). Un
+# `aiken check` pelado sale con exit 1 y el build de la imagen no termina.
+#
+# OJO al filtrar: aiken no tiene flag de exclusión, y `-m escrow` (el módulo) NO
+# matchea nada — corre 0 tests y sale 0, o sea que pasaría sin validar nada. `-m`
+# matchea NOMBRES DE TEST (por substring), así que hay que nombrarlos como acá.
+# Este `aiken check` además descarga `aiken-lang/fuzz` y lo deja cacheado.
 RUN cd /curso/cardano \
-    && aiken check \
+    && aiken check -m claim -m cancel -m v2_ \
     && aiken build
 
 # --- Off-chain de Cardano (Mesh) — transacciones reales, Clase 4 -------------
@@ -202,8 +250,8 @@ ENV YACI_API=http://host.containers.internal:8080/api/v1/ \
 # Se baja la 4.12 oficial de Z3Prover y se instala con ese nombre.
 #
 # En arm64 esto NO sirve: el solc de aarch64 se compila SIN soporte de z3
-# (0 símbolos Z3_*), así que el SMTChecker no puede funcionar. Por eso el paso
-# se salta silenciosamente en esa arquitectura.
+# (0 símbolos Z3_*), así que el paso se salta en esa arquitectura y el SMTChecker
+# usa Eldarica, que se instala más abajo.
 #
 # Escribe en /usr/lib y corre ldconfig, así que necesita root: a esta altura del
 # Containerfile ya estamos como `curso` (desde la línea del USER más arriba), y
@@ -219,7 +267,42 @@ RUN set -eux; \
         ldconfig; rm -rf /tmp/z3.zip /tmp/z3-*; \
         echo ">>> libz3 4.12 instalada: el SMTChecker de solc funciona en esta imagen"; \
     else \
-        echo ">>> arm64: el solc de aarch64 no soporta z3; el SMTChecker no estara disponible"; \
+        echo ">>> arm64: el solc de aarch64 no soporta z3; el SMTChecker usa Eldarica"; \
+    fi
+
+# Eldarica — el solver del SMTChecker en arm64 (Clase 6).
+#
+# El otro solver que solc acepta para `chc`, y la única salida en aarch64: a
+# Eldarica la invoca como PROCESO EXTERNO (busca `eld` en el PATH), así que no
+# depende de cómo se compiló el binario de solc. Verificado sobre Vault.sol:
+# reporta lo mismo que z3 (underflow "happens here" en la linea 30, overflow
+# "might happen" en la 20) en ~110 s. Dos diferencias con z3, y ninguna se
+# arregla: NO imprime el contraejemplo concreto (z3 dice `amount = 1`, Eldarica
+# sólo dice que el camino existe), y una consulta termina en
+# "CHC: Error trying to invoke SMT solver".
+#
+# Sólo se instala en arm64: son ~250 MB (Eldarica es JVM) y en amd64 no hace
+# falta, porque ahí z3 anda y además da el contraejemplo. Que `eld` NO exista en
+# la imagen amd64 es inofensivo: con `solvers = ["z3", "eld"]` en ethereum/foundry.toml
+# solc usa z3, y sólo agrega un `Warning (4458): Solver Eldarica was selected ...
+# but it was not found` (verificado en macOS el 2026-09-24). Esa línea es OBLIGATORIA: sin ella
+# solc elige z3 aunque `eld` esté en el PATH, y en arm64 no analiza nada.
+ARG ELDARICA_VERSION=2.3
+RUN set -eux; \
+    if [ "$(dpkg --print-architecture)" = "arm64" ]; then \
+        apt-get update; \
+        apt-get install -y --no-install-recommends default-jre-headless; \
+        rm -rf /var/lib/apt/lists/*; \
+        cd /opt; \
+        curl -fsSL -o eld.zip \
+          "https://github.com/uuverifiers/eldarica/releases/download/v${ELDARICA_VERSION}/eldarica-bin-${ELDARICA_VERSION}.zip"; \
+        unzip -q eld.zip; rm eld.zip; \
+        chmod +x "/opt/eldarica-bin-${ELDARICA_VERSION}/eld"; \
+        ln -s "/opt/eldarica-bin-${ELDARICA_VERSION}/eld" /usr/local/bin/eld; \
+        eld -h > /dev/null 2>&1 || true; \
+        echo ">>> Eldarica ${ELDARICA_VERSION} instalada: el SMTChecker funciona en arm64"; \
+    else \
+        echo ">>> amd64: el SMTChecker usa z3, Eldarica no hace falta"; \
     fi
 USER curso
 
@@ -243,9 +326,11 @@ RUN { \
       echo "anvil: $(anvil --version | head -1)"; \
       echo "aiken: $(aiken --version)"; \
       echo "slither: $(slither --version 2>&1 | head -1)"; \
+      echo "halmos: $(halmos --version 2>&1 | head -1)"; \
       echo "node: $(node --version)"; \
       echo "marp: $(marp --version 2>&1 | head -1)"; \
-      echo "z3: $(z3 --version)"; \
+      echo "z3 (Debian): $(/usr/bin/z3 --version)"; \
+      echo "z3 (wheel de halmos): $(/opt/venv/bin/z3 --version)"; \
     } > /home/curso/VERSIONES.txt
 
 # --- PATH también para login shells -----------------------------------------
